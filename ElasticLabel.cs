@@ -2,7 +2,6 @@
 using System.Buffers.Text;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -63,12 +62,12 @@ public class ElasticLabel
         File.WriteAllBytes(path, Encode(label));
     }
 
-    public static ElasticLabel? Decode(string path)
+    public static ElasticLabel Decode(string path)
     {
         return Decode(File.ReadAllBytes(path));
     }
 
-    public static ElasticLabel? Decode(ReadOnlySpan<byte> bytes)
+    public static ElasticLabel Decode(ReadOnlySpan<byte> bytes)
     {
         return JsonSerializer.Deserialize<ElasticLabel>(bytes) ?? throw new Exception("failed to decode");
     }
@@ -127,7 +126,8 @@ public class ElasticLabel
 
     internal static void RenderRect(Graphics g, ElasticField field)
     {
-        using var pen = new Pen(Color.Black, 2);
+        var width = int.Parse(field.Value);
+        using var pen = new Pen(Color.Black, width);
         g.DrawRectangle(pen, field.Rect);
     }
 
@@ -190,15 +190,11 @@ public class ElasticLabel
         g.DrawImage(bmp, new Rectangle(x, y, size, size), new Rectangle(0, 0, bmp.Width, bmp.Height), GraphicsUnit.Pixel);
     }
 
-    internal static Image RenderPreview(ElasticLabel label)
+    internal static void RenderPreviewOnGraphics(ElasticLabel label, Graphics g, int width, int height)
     {
-        var dst = new Bitmap(label.Width, label.Height, PixelFormat.Format24bppRgb);
-
-        using var g = Graphics.FromImage(dst);
-
+        g.ScaleTransform((float)width / label.Width, (float)height / label.Height);
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
-
         g.Clear(Color.White);
 
         foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.Text)) RenderText(g, field);
@@ -208,32 +204,34 @@ public class ElasticLabel
         foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.QrCodeSlot)) RenderQrCodeSlotPreview(g, field);
 
         foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.Rect)) RenderRect(g, field);
-
-        dst.SetResolution(label.Width / label.WidthCm * 2.54f, label.Height / label.HeightCm * 2.54f);
-
-        return dst;
     }
 
-    internal static Image Render(ElasticLabel label, Dictionary<string, string> slotValues)
+    internal static void RenderOnGraphics(ElasticLabel label, Graphics g, int width, int height, IDictionary<string, string> slotValues)
     {
-        var dst = new Bitmap(label.Width, label.Height, PixelFormat.Format24bppRgb);
-
-        using var g = Graphics.FromImage(dst);
-
+        g.ScaleTransform((float)width / label.Width, (float)height / label.Height);
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
-
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
         g.Clear(Color.White);
 
         foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.Text)) RenderText(g, field);
         foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.Image)) RenderImage(g, field);
 
-        foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.TextSlot)) RenderTextSlot(g, field, slotValues.GetValueOrDefault(field.Entry));
-        foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.QrCodeSlot)) RenderQrCodeSlot(g, field, slotValues.GetValueOrDefault(field.Entry));
+        foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.TextSlot))
+        {
+            if (slotValues.TryGetValue(field.Entry, out var value))
+            {
+                RenderTextSlot(g, field, value);
+            }
+        }
+
+        foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.QrCodeSlot))
+        {
+            if (slotValues.TryGetValue(field.Entry, out var value))
+            {
+                RenderQrCodeSlot(g, field, value);
+            }
+        }
 
         foreach (var field in label.Fields.Where(field => field.Type == ElasticFieldType.Rect)) RenderRect(g, field);
-
-        dst.SetResolution(label.Width / label.WidthCm * 2.54f, label.Height / label.HeightCm * 2.54f);
-
-        return dst;
     }
 }

@@ -62,14 +62,14 @@ public class ElasticField
         };
     }
 
-    public static ElasticField NewRect(Rect rect)
+    public static ElasticField NewRect(Rect rect, int width)
     {
         return new ElasticField
         {
             Type = ElasticFieldType.Rect,
             Rect = rect,
             Entry = "rec",
-            Value = "",
+            Value = $"{width}",
         };
     }
 
